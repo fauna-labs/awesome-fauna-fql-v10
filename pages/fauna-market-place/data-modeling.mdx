@@ -1,0 +1,27 @@
+# Data modeling
+
+Let's explore the data models in this sample app. You have three main data entities; `User`, `Shop` and `Product`. Each of these entities is a collection.
+
+Fauna is document-relational; it **combines the flexibility and familiarity of JSON documents with the relationships and querying power of a traditional relational database.**
+
+You have the complete flexibility to store unstructured data while also getting the structured querying power of traditional SQL databases. You can effortlessly define data relationships (i.e. One to Many, Many to Many etc) in Fauna.
+
+The following diagrams demonstrates the data models and relationships. 
+
+**User has many shop**
+
+There is a **one to many** relationship between users and shop. A user can have many shops. 
+
+![one to many](https://workshop-shadid.s3.amazonaws.com/sample-app/data-modeling+1.png)
+
+**Shop has many products**
+
+There is a **one to many** relationship between shops and products. A shop has many products.
+
+![one to many in shop](https://workshop-shadid.s3.amazonaws.com/sample-app/data-modeling+2.png)
+
+**A shop can have many orders and a user can order from multiple shops at the same time.** There is a **many to many** relationship between shops and users. We create another collection called **OrderDetail** to handle this relationship. 
+
+![many to many](https://workshop-shadid.s3.amazonaws.com/sample-app/data-modeling+3.png)
+
+To learn more about data modelling in Fauna follow [this link](https://docs.fauna.com/fauna/current/learn/tutorials/fql/basics/data_modeling).

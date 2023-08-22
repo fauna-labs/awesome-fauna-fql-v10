@@ -1,0 +1,363 @@
+# Authentication and ABAC
+
+🧙‍♂️ [Legacy Blog](https://fauna.com/blog/user-authentication-in-fauna-an-opinionated-guide)
+
+****Securing your data with UDFs and ABAC roles****
+
+Fauna provides two features that allow us to secure our data: [Attribute-Based Access Control (ABAC)](https://docs.fauna.com/fauna/current/security/abac) and User Defined Functions (UDF). With ABAC, we can control which collections or entities a specific key or token can access by writing Roles.
+
+Fauna seamlessly integrates with external Auth providers. The following is a list of supported Auth providers:
+
+- Auth0 [link to integration]
+- Cognito [link to integration]
+- Okta [link to blog post]
+- Clerk [link]
+- Stytch [link]
+- Metamask [link]
+- Web3.js [sample code link]
+
+For simplicity we will use Fauna’s built in Auth in this application. In the later section we can update it to one of the more sophisticated Auth providers. 
+
+## Securing Application with ABAC
+
+Instead of using the server key in our application we will use a public key with limited privileges. The public key assumes a role that has privileges to do only read operations in all the *Collection*. Every other operation is be restricted for this key. 
+
+Following diagram gives you a visualization of this scenario.
+
+ 
+
+![abac diagram](https://workshop-shadid.s3.amazonaws.com/sample-app/authentication-abac+1.png)
+
+Using the shell create a new *Role* called `UnAuthenticatedRole` and a key for the this role. Run the following FQL code to create the *Role* and the key.
+
+```jsx
+Role.create({
+  name: "UnAuthenticatedRole",
+  privileges: [
+    {
+      resource: "User",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Product",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Shop",
+      actions: {
+        read: true
+      }
+    }
+  ]
+})
+
+let unAuthPubliKey = Key.create({ role: "UnAuthenticatedRole" })
+unAuthPubliKey
+```
+
+This will return a response as follows. 
+
+```jsx
+{
+  "id": "358243630271430723",
+  "coll": "Key",
+  "ts": "2023-03-04T05:09:59.240Z",
+  "secret": "fnAE-LyvBWAAQ_rdkz_DbDwSpgHt1pE5rRtweu4y",
+  "role": "UnAuthenticatedRole"
+}
+```
+
+The returned secret is your application’s public key (it assumes all the permissions granted to the `UnAuthenticatedRole` user role). This is the key you will use to register and log-in users in your application, this key also has read-only permission to all your collections meaning it cannot be used to create, update, or delete any document in any collection.
+
+The unauthenticated users need a way to signup and login into your application. We create two user defined functions called `Signup` and `Login` so users can do just that. 
+
+### Signup
+
+Let’s begin by creating the `Signup`function so that unauthenticated users can create an account on your application. 
+
+![sign-up function](https://workshop-shadid.s3.amazonaws.com/sample-app/authentication-abac+2.png)
+
+**Creating the Signup function:** 
+
+To create the `Signup`function we run the following FQL code in the shell. Make sure you are using the Admin key for this portion as, if you recall, the `UnAuthenticatedRole` key does not give access to create, update, or delete any document or functions in any collection.
+
+```jsx
+Function.create({
+  name: "Signup",
+  role: "server",
+  body: "(username, email, password) => {
+    let user = User.create({ name: username, email: email })
+    Credentials.create({ document: user, password: password })
+  }"
+})
+```
+
+The FQL function body is written like a standard JavaScript arrow function. When you call the function from your application you provide `username`, `email` and `password`  as parameters; you are able to define any other additional parameters you may need here as well. In the function body you have the `Credentials.create` built in fauna function, which will securely encrypt and hide the password. 
+
+The response should be as follows:
+
+```jsx
+{
+  "name": "Signup",
+  "coll": "Function",
+  "ts": "2023-03-05T18:31:16.835Z",
+  "body": "(username, email, password) => {\n    let user = User.create({ name: username, email: email })\n    Credentials.create({ document: user, password: password })\n  }",
+  "role": "server"
+}
+```
+
+Now that you’ve created the function try to execute this following code in Fauna Shell using the `UnAuthenticatedRole` secret as key. To change the key just replace the Admin key with the `UnAuthenticatedRole` key in the *“secret”* input. 
+
+```jsx
+Signup("JonLuc", "picard@tng.com", "omega") 
+```
+
+This should give you an insufficient privileges error. This error is excepted, as we haven’t provided the `UnAuthenticatedRole` role privilege to call the `Signup` function.
+
+```bash
+Error: permission_denied
+
+Insufficient privileges to perform the action.
+
+error: Insufficient privileges to perform the action.
+at *query*:1:7
+  |
+1 | Signup("JonLuc", "picard@tng.com", "omega")
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+```
+
+Let’s fix this. In your shell insert the admin key again. Then update the role by running the following code which gives the `UnAuthenticatedRole` privilege to call the `Signup`function. 
+
+```jsx
+Role.byName("UnAuthenticatedRole").update({
+  privileges: [
+    {
+      resource: "User",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Product",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Shop",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Signup",
+      actions: {
+        call: true
+      }
+    }
+  ]
+})
+```
+
+At this point, swap the admin key with `UnAuthenticatedRole` key again and try running the `Signup` function again. 
+
+```jsx
+Signup("JonLuc", "picard@tng.com", "omega")
+```
+
+This time you should be able to register a new user and the result will return the following:
+
+```bash
+Result Value:
+
+null
+```
+
+Run `User.all` in the shell to verify that the user is indeed created. Next let’s explore how the login functionality will work.
+
+### Login
+
+Just like `Signup` , `UnAuthenticatedRole` users can call the `Login` function with email and password to login. If email and password match the data saved in the database then we can use Fauna to issue a temporary key to the user. We then save the user’s key as a session token for the duration of their time using the application. While using this key, the user now assumes the `AuthenticatedUser` role.  The following diagram demonstrates this flow:
+
+![unauthenticated and authenticated user flow](https://workshop-shadid.s3.amazonaws.com/sample-app/authentication-abac+3.png)
+
+**Creating the Login function:**
+
+We will create the `Login` function by running the following code in your Fauna shell while using the admin key.
+
+```jsx
+
+User.definition.update({
+  indexes: {
+    byEmail: {
+      terms: [{ field: "email" }]
+    }
+  }
+})
+
+Function.create({
+  name: "Login",
+  role: "server",
+  body: "(email, password) => {
+    let user = User.byEmail(email).first()
+    Credentials.byDocument(user).login(password)
+  }" 
+})
+```
+
+ ****The output should be as follows:
+
+```bash
+Result Value:
+
+{
+  "name": "Login",
+  "coll": "Function",
+  "ts": "2023-03-05T19:02:35.535Z",
+  "body": "(email, password) => {\n    let user = User.byEmail(email).first()\n    Credentials.byDocument(user).login(password)\n  }",
+  "role": "server"
+}
+```
+
+Now, with that done, just like how the `UnAuthenticated` role did not initially have `Signup` privilege it currently still does not have privilege to run the `Login` function. We must now update the `UnAuthenticated` role privileges by running the following code; make sure you are still using the admin secret key.
+
+```bash
+Role.byName("UnAuthenticatedRole").update({
+  privileges: [
+    {
+      resource: "User",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Product",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Shop",
+      actions: {
+        read: true
+      }
+    },
+    {
+      resource: "Signup",
+      actions: {
+        call: true
+      }
+    },
+    {
+      resource: "Login",
+      actions: {
+        call: true
+      }
+    }
+  ]
+})
+```
+
+Now, with that out of the way we are ready to create a new role called `AuthenticatedRole`. This role should have access to all the database resources meaning it will be able to read, write, create and delete in all the collections. Run the following code in the Fauna shell to create this new role:
+
+```jsx
+Role.create({
+  name: "AuthenticatedRole",
+  membership: {
+    resource: "User"
+  },
+  privileges: [
+    {
+      resource: "User",
+      actions: {
+        read: true,
+        create: true,
+        write: true,
+        delete: true
+      }
+    },
+    {
+      resource: "Shop",
+      actions: {
+        read: true,
+        create: true,
+        write: true,
+        delete: true
+      }
+    },
+    {
+      resource: "Product",
+      actions: {
+        read: true,
+        create: true,
+        write: true,
+        delete: true
+      }
+    }
+  ]
+})
+```
+
+Notice in the code above we defined a membership property and it has `User` collection as a resource. This means based on records created in the `User` collection when the user signs up, if their credentials match, they can login and assume the `AuthenticatedRole` role.
+
+Try running the `Login` function using the `UnAuthenticated` role key to make sure this is true.
+
+```jsx
+Login("picard@tng.com", "omega")
+```
+
+```jsx
+Result Value:
+
+{
+  "id": "358257703275987011", //this id is unique and will be different for you
+  "coll": "Token",
+  "ts": "2023-03-04T08:53:40.310Z",
+  "secret": "fnEE-Ml7pdAAQwT3Fd_dwAhTG0XvNvxGJ5fWWr82F2-Q3mYHHeI",
+  "document": {
+    "id": "358250589763665987",
+    "coll": "User",
+    "ts": "2023-03-04T07:00:36.380Z",
+    "name": "JonLuc",
+    "email": "picard@tng.com"
+  }
+}
+```
+
+The result returns a secret. Using this secret you can access all the database resources described previously.
+
+### Further tightening the security with ABAC
+
+All logged-in users can currently view other users' information. A user should only be able to read, update and delete that user's data. With Fauna's ABAC, you can provide fined-grained access to users' data.
+
+You can change this by updating the privileges. Run the following query.
+
+```jsx
+Role.byName("AuthenticatedRole").update({ 
+  privileges: [
+    {
+      resource: "Shop",
+      actions: {
+        read: true,
+        create: true,
+        write: "(oldData, newData) => Query.identity() == oldData.owner && oldData.owner == newData.owner",
+        delete: "(data) => Query.identity() == data.owner"
+      }
+    },
+    {
+      resource: "Product",
+      actions: {
+        read: true,
+        create: true,
+        write: "(oldData, newData) => Query.identity() == oldData.owner && oldData.owner == newData.owner",
+        delete: "(data) => Query.identity() == data.owner"
+      }
+    }
+  ]
+})
+```

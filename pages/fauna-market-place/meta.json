@@ -1,4 +1,8 @@
 {
     "index": "📖 Introduction",
-    "data-modeling": "📖 Data Modeling"
+    "data-modeling": "📖 Data Modeling",
+    "fauna-configuration": "📖 Fauna Configuration",
+    "using-the-fauna-shell" : "📖 Using the Fauna Shell",
+    "configure-the-nextjs-app": "📖 Configure the Next.js App",
+    "authentication-and-abac": "📖 Authentication and ABAC"
 }

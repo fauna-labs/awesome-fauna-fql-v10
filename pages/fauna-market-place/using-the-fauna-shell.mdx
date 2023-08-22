@@ -1,0 +1,267 @@
+# Using the Fauna Shell
+
+## Creating Collection
+
+From the [data modelling](Data%20modeling%20589f260fa6a948c5b4d0a6b479b63ea9.md) sections we know that we need the following collections:
+
+- User
+- Shop
+- Product
+- Order
+- OrderDetails
+
+Go to the [Fauna dashboard](https://dashboard.fauna.com/) and navigate to Fauna web shell from there. Now, select the database you are working with.
+
+![fauna well shell](https://workshop-shadid.s3.amazonaws.com/sample-app/fauna+shell+1.png)
+
+You will be taken to a screen where your database organized as a folder system and a web shell taking up the right side of the screen. 
+
+![database folder structure](https://workshop-shadid.s3.amazonaws.com/sample-app/fauna+shell+2.png)
+
+In this section we will be familiarizing oRun the following code in the shell to create the collections we mentioned above.
+
+First, let’s create the collections we mentioned above. This can be done in two ways, 1) using the web-shell or 2) from the UI directly. In fact, everything we will cover today can be done through the UI; this will be covered in the next section.
+
+Let’s go over the web-shell way first. Simply run the following code in the shell to create the collections.
+
+```jsx
+Collection.create({ name: "User" })
+Collection.create({ name: "Shop" })
+Collection.create({ name: "Product" })
+Collection.create({ name: "Order" })
+Collection.create({
+  name: "OrderDetails"
+})
+```
+
+![creating collections via shell](https://workshop-shadid.s3.amazonaws.com/sample-app/fauna+shell+3.png)
+
+Notice that at this point the collection created above are displayed under the Collections folder in the dashboard.
+
+![created collection](https://workshop-shadid.s3.amazonaws.com/sample-app/fauna+shell+4.png)
+
+***If you are completely new to Fauna and FQL please refer to the CRUD section of the documentation.*** 
+
+## Data Relationships
+
+At this point let’s go ahead and explore how data-relationships work in Fauna. The sample app we are working on covers some of the basic data-relations such as one-to-many, many-to-many, and one-to-one.
+
+***One-to-Many***
+
+Create a new user from the Fauna web shell. Run the following code to create a new user:
+
+```jsx
+User.create({
+  "name": "test",
+  "email": "test@email.com",
+})
+
+// Response 
+/**
+>> SUCCESS {
+  "coll": {
+    "name": "User"
+  },
+  "id": "360355394276556881",
+  "ts": {
+    "isoString": "2023-03-27T12:35:34.354Z"
+  },
+  "name": "test",
+  "email": "test@email.com"
+}
+**/
+```
+
+![creating a user](https://workshop-shadid.s3.amazonaws.com/sample-app/fauna+shell+5.png)
+
+In the app we can see the *one-to-many* relationship between `User` and `Shop` model. More specifically: a user can have many shops. Below we demonstrate how to establish a one-to-many relationship between User and Shop models. 
+
+Run the following code in the web shell; make sure to replace `<userdId>` with the id of the previously created test user.
+
+```jsx
+let user = User.byId("<userId>")
+
+Shop.create({
+ name: "Sam's Electric Swags",
+ description: "Some descrption of the shop",
+ countryLocation: "USA",
+ owner: user 
+})
+
+Shop.create({
+ name: "Sam's T shirt store",
+ description: "Get cool t shirts here",
+ countryLocation: "USA",
+ owner: user 
+})
+```
+
+Notice on line 1 of the previous code block you query a user and assign it to a variable called `user`. Next, you create a shop with `create` method. In the create method you set the user reference to the `owner` field of the shop. This association creates a ‘has many’ relationship. If you are familiar with SQL databases think of this as a foreign key join. Fauna gives you the querying capabilities of a relational SQL database with the flexibility of a NoSQL database. We call this the [document relational](https://docs.fauna.com/fauna/current/learn/introduction/document_relational) model. 
+
+Now, let’s go ahead and explore how to query data in a one-to-many relationship model.
+
+To get all the shops that belong to a user you can run the following query:
+
+```jsx
+let user = User.byId("<userId>")
+Shop.all().where(.owner == user)
+```
+
+To get a particular shop’s owner information you can run the following query:
+
+```jsx
+let shop = Shop.byId("<shopId>")
+
+shop {
+ owner
+}
+```
+
+***Many-to-Many***
+
+A user can buy from many shops and a shop sells to many users. `Shop` and `User` collections have a *many-to-many* relationship through the `OrderDetails` collection. It works just like a join table in SQL. The following code snippet demonstrates how you define it in FQL X:
+
+```jsx
+let user = User.byId("<userId>")
+let shop = Shop.byId("<shopId>")
+
+OrderDetails.create({
+  vendor: shop,
+  customer: user,
+  products: [
+    "<productId1>",
+    "<productId2>",
+  ]
+})
+
+let shop2 = Shop.byId("<shopId>")
+
+OrderDetails.create({
+  vendor: shop2,
+  customer: user,
+  products: [
+    "<productId3>",
+    "<productId4>",
+  ]
+})
+```
+
+To find all the shops a user has shopped from, you can run the following FQL X code: 
+
+```jsx
+let user = User.byId("<userId>")
+
+let details = OrderDetails.all().where(.customer == user)
+
+details {
+  vendor
+}
+```
+
+***One-to-One*** 
+
+`User` and `UserProfile`  collections have one-to-one relationship, a user can only have one profile. The  following FQL query demonstrates how to define this relationship.
+
+```jsx
+let user = User.create({
+  name: "Jon Luc Picard",
+  email: "picard@eterprize.com"
+})
+
+let profile = UserProfile.create({
+  address: "123 California Ave",
+  user: user
+})
+```
+
+## Fauna Indexes
+
+**What are Indexes in Fauna?**
+
+Fauna uses indexes to efficiently and quickly retrieve and manipulate data based on various criteria defined by you. Fauna indexes help organize and optimize data queries in a Fauna database. In summary, an index is a data structure that enables you to search and retrieve data quickly based on specific criteria.
+
+More information is available at… [insert link to indexes page in docs]
+
+Let’s create our first index. Run the following code in shell to create a `byEmail` index on the `User` collection. This index helps you query users by email more efficiently than the queries we saw previously.
+
+```jsx
+User.definition.update({
+  indexes: {
+    byEmail: {
+      terms: [{ field: "email" }]
+    }
+  }
+})
+```
+
+To verify run the following code.
+
+```jsx
+User.byEmail("james@email.com")
+```
+
+We can convert one of the previous queries to use an index. Let’s find all the shops that belongs to a particular user. 
+
+First create a new index to find shops by owner.
+
+```jsx
+Shop.definition.update({
+  indexes: {
+    byShopOwner: {
+      terms: [{ "field": "owner" }]
+    }
+  }
+})
+```
+
+Now you can run the following code to get shops by owner reference. 
+
+```jsx
+let owner = User.byId("<userId>")
+Shop.byShopOwner(owner)
+```
+
+This query is more optimized than using `all()` method. If you have a lot of data then using an index will reduce your compute costs.  
+
+## Composing queries
+
+You have the option to compose queries in Fauna. Similar to indexes more complex queries can be used to sort and understand your data more efficiently and cheaply, especially with larger data sets. The following is an example of a complex query for searching through products in our database:
+
+```jsx
+Product.all().where(
+  (.price > 20 && .price < 300 ) && 
+  (.name != null && .name.toLowerCase().includes("shirt"))
+)
+.order(desc(.ts))
+```
+
+This query will return products within a specified price range, including a specific term in the product title, and organize the results in the descending order based on date published. This is just one example of the complex queries FQL X is capable of and more examples can be found at <insert link when available here/>.
+
+## User Defined Functions (UDF)
+
+UDF (User-Defined Functions) in Fauna are functions that you create and store within your Fauna database. 
+
+UDFs allow you to encapsulate logic and business rules in a centralized location, making it easier to manage and reuse across your application(s).
+
+You can turn the product search logic from the previous section into a UDF by running the following code.
+
+```jsx
+Function.create({
+  name: "SearchProduct",
+  role: "server",
+  body: "(priceMin, priceMax, searchTerm) => {
+    Product.all().where(
+     (.price > priceMin && .price < priceMax ) && 
+     (.name != null && .name.toLowerCase().includes(searchTerm))
+    )
+  }"
+}) 
+```
+
+Then, you can call the function as follows. 
+
+```jsx
+SearchProduct(20, 300, "shirt")
+```
+
+That wraps up this section, if you have any questions feel free to reach out at < insert something here to contact /> or you can look up more information <insert link to other pages here />.
