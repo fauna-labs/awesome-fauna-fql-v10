@@ -24,14 +24,14 @@ export default {
       <meta property="og:url" content="https://fauna.com"/>
       <meta property="og:title" content="Fauna Sample Applications"/>
       <meta property="og:description" content="Building applications with Fauna database"/>
-      <meta property="og:image" content="https://workshop-shadid.s3.amazonaws.com/cloudflare-3.png"/>
+      <meta property="og:image" content="https://workshop-shadid.s3.amazonaws.com/sample-app/sample-app.png"/>
 
       <meta name="twitter:site" content="@fauna" />
       <meta property="twitter:card" content="summary_large_image"/>
       <meta property="twitter:url" content="https://fauna.com"/>
       <meta property="twitter:title" content="Fauna Sample Applications"/>
       <meta property="twitter:description" content="Building applications with Fauna database"/>
-      <meta property="twitter:image" content="https://workshop-shadid.s3.amazonaws.com/cloudflare-3.png"/>
+      <meta property="twitter:image" content="https://workshop-shadid.s3.amazonaws.com/sample-app/sample-app.png"/>
 
 
 
