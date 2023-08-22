@@ -1,9 +1,4 @@
 {
   "index": "Introduction",
-  "application-architecture": "Application Architecture",
-  "getting-started": "Getting Started",
-  "implementing-video-recording": "Implementing Video Recording",
-  "user-authentication": "User Authentication",
-  "data-relationships": "Data Relationships",
-  "putting-it-all-together": "Putting It All Together"
+  "fauna-market-place": "🛍️ Marketplace App"
 }
